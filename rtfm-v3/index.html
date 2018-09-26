@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta content="Rust, embedded, development" name="keywords">
+<meta content="Jorge Aparicio" name="author">
+<meta property="og:title" content="RTFM v0.3.0: safe `&amp;&#39;static mut T` and less locks - Embedded in Rust">
+<meta property="og:url" content="https://blog.japaric.io/rtfm-v3/">
+<meta property="og:description" content="A blog about Rust and embedded stuff">
+<meta property="og:type" content="website" />
+<title>RTFM v0.3.0: safe `&amp;&#39;static mut T` and less locks | Embedded in Rust</title>
+<link rel="stylesheet" href="https://blog.japaric.io//css/style.css">
+<link rel="shortcut icon" href="https://blog.japaric.io//wave.ico">
+<link rel="alternate" type="application/atom+xml" title="Embedded in Rust Posts" href="https://blog.japaric.io//index.xml">
+<link href="//maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
+
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.9.0/styles/github.min.css">
+
+</head>
+
+<body>
+<section class="section">
+  <div class="container">
+    <nav class="nav">
+      <div class="nav-left">
+        <a class="nav-item" href="https://blog.japaric.io/"><h1 class="title is-4">Embedded in Rust</h1></a>
+      </div>
+      <div class="nav-right">
+        <nav class="nav-item level is-mobile">
+          
+          <a class="level-item" href="https://github.com/japaric" target="_blank">
+            <span class="icon">
+              <i class="fa fa-github"></i>
+            </span>
+          </a>
+          
+          <a class="level-item" href="https://twitter.com/japaricious" target="_blank">
+            <span class="icon">
+              <i class="fa fa-twitter"></i>
+            </span>
+          </a>
+          
+          <a class="level-item" href="/index.xml" target="_blank">
+            <span class="icon">
+              <i class="fa fa-rss"></i>
+            </span>
+          </a>
+          
+        </nav>
+      </div>
+    </nav>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <h1 class="title">RTFM v0.3.0: safe `&amp;&#39;static mut T` and less locks</h1>
+    <h2 class="subtitle is-5">January 22, 2018 by Jorge Aparicio</h2>
+    
+      <div class="tags">
+    
+        <a class="button is-link" href="/tags/arm-cortex-m">ARM Cortex-M</a>
+    
+        <a class="button is-link" href="/tags/concurrency">concurrency</a>
+    
+        <a class="button is-link" href="/tags/rtfm">RTFM</a>
+    
+</div>
+
+    
+    <div class="content">
+      
+
+<p>RTFM (Real Time For the Masses) v0.3.0 is <a href="https://docs.rs/cortex-m-rtfm/~0.3.1">out</a>! This blog post will cover the goodies of this new
+release.</p>
+
+<p>The minor (breaking) release was mainly to become compatible with the new IO model presented in my
+<a href="/brave-new-io">previous blog post</a>, but a new feature also shipped with this release: <em>safe</em>
+creation of <code>&amp;'static mut</code> references.</p>
+
+<p>First, let&rsquo;s look at one feature that landed in v0.2.1 but that didn&rsquo;t get documented in this blog,
+yet it was essential to adapt RTFM to the new IO model:</p>
+
+<h1 id="late-resources">Late resources</h1>
+
+<p>In RTFM all <em>resources</em>, the main mechanism to share memory between <em>tasks</em>, are implemented as
+<code>static</code> variables. In Rust <code>static</code> variables need to have an initial value so, in v0.2.0, you had
+to declare an initial value for all resources declared in the <code>app!</code> macro.</p>
+
+<pre><code class="language-rust">// cortex-m-rtfm v0.2.0
+app! {
+    resources: {
+        static COUNTER: u32 = 0;
+        static ON: bool = false;
+    }
+}
+
+fn init(p: init::Peripherals, r: init::Resources) {
+    assert!(r.COUNTER, 0);
+    assert!(!r.ON);
+}
+</code></pre>
+
+<p>In v0.2.1, RTFM gained support for &ldquo;late resources&rdquo;, resources with runtime (&ldquo;late&rdquo;)
+initialization. Resources that are not assigned an initial value in <code>app!</code> are considered to be late
+resources. These resources need to be assigned an initial value by the end of the <code>init</code> function.</p>
+
+<pre><code class="language-rust">// cortex-m-rtfm v0.2.1
+app! {
+    resources: {
+        static NORMAL: u32 = 0;
+        static LATE: u32;
+    },
+
+    idle: {
+        resources: [LATE],
+    }
+}
+
+fn init(p: init::Peripherals, r: init::Resources) -&gt; init::LateResources {
+    // normal resources can be accessed via `init::Resources`
+    r.NORMAL += 1;
+
+    // but late resources can not because they have not been initialized
+    // at this point
+    //r.LATE += 1;
+    //~^ error: no field named `LATE` found in `init::Resources`
+
+    let private_key = load_from_eeprom();
+
+    // late resources get assigned their initial value here
+    init::LateResources {
+        LATE: private_key,
+    }
+}
+
+// late resources, the actual static variables, get initialized somewhere
+// between `init` and `idle`
+// (recall that the start of `idle` is also when tasks become enabled (can start))
+
+fn idle(t: &amp;mut Threshold, r: idle::Resources) -&gt; ! {
+    // late resources can be used at this point
+    let private_key = *r.LATE;
+
+    loop {
+        // do stuff with `private_key`
+    }
+}
+</code></pre>
+
+<p>This allows initialization of resources in <code>init</code> without the use of <code>Option</code>. In v0.2.0, you could
+achieve more or less the same using a normal resource with an initial value of <code>None</code> but then you
+needed to <code>unwrap</code> the resource to access its value.</p>
+
+<h1 id="new-i-o-model-less-locks">New I/O model = less locks</h1>
+
+<p>The breaking change that moved RTFM to v0.3.0 is: peripherals are no longer special. In v0.2.0,
+any resource associated to a task that didn&rsquo;t appear in the list of declared resources was
+considered a peripheral. Here&rsquo;s an example:</p>
+
+<pre><code class="language-rust">// cortex-m-rtfm v0.2.x
+
+app! {
+    // declared resources
+    resources: {
+        static COUNTER: u32 = 0;
+        // no USART1 here!
+    },
+
+    tasks: {
+        EXTI0: {
+            path: exti0,
+            // yet it appears here!
+            resources: [USART1],
+            priority: 1,
+        },
+
+        EXTI1: {
+            path: exti1,
+            // and here!
+            resources: [USART1],
+            priority: 2,
+        },
+    }
+}
+
+fn init(p: init::Peripherals, r: init::Resources) {
+    let usart1: &amp;mut USART1 = p.USART1;
+
+    // omitted: initialization of the serial interface
+}
+
+fn exti0(t: &amp;mut Threshold, r: EXTI0::Resources) {
+    r.USART1.lock_mut(|usart1: &amp;mut USART1| {
+        let tx = Tx(usart1);
+        // do stuff with `tx` (transmitter)
+    });
+}
+
+fn exti1(t: &amp;mut Threshold, r: EXTI1::Resources) {
+    let usart1: &amp;mut USART1 = r.USART1;
+    let rx = Rx(usart1);
+    // do stuff with `rx` (receiver)
+}
+</code></pre>
+
+<p>Here RTFM assumes that <code>USART1</code> is a peripheral since it doesn&rsquo;t appear in the list of resources.
+v0.3.x is less magic: if you assign an undeclared resource to a task you get a compile time (proc
+macro) error.</p>
+
+<p>Following the new I/O model in v0.3.x you get <em>ownership</em> over all the peripherals in <code>init</code> &ndash; no
+need to call <code>Peripherals::take().unwrap()</code> &ndash; and you are free to put them in <em>late</em> resources or
+not.</p>
+
+<p>Let&rsquo;s port the USART example to v0.3.x.</p>
+
+<pre><code class="language-rust">// cortex-m-rtfm v0.3.x
+app! {
+    resources: {
+        // (the Rx and Tx used here are simplified versions of what you'd find
+        //  in stm32f30x-hal)
+        static RX: Rx&lt;USART1&gt;;
+        static TX: Tx&lt;USART1&gt;;
+    },
+
+    tasks: {
+        EXTI0: {
+            path: exti0,
+            resources: [TX],
+            priority: 1,
+        },
+
+        EXTI1: {
+            path: exti1,
+            resources: [RX],
+            priority: 2,
+        },
+    }
+}
+
+fn init(p: init::Peripherals) -&gt; init::LateResources {
+    // Note that this is now an owned value, not a reference
+    let usart1: USART1 = p.device.USART1;
+
+    // omitted: GPIO and clock configuration
+
+    // `pa9` and `pa10` are the Tx and Rx pins that `serial` will use
+    let serial =
+        Serial::new(usart1, (pa9, pa10), 9_600.bps(), clocks, &amp;mut rcc.APB2);
+
+    // split `serial` in transmitter and receiver halves
+    let (tx, rx) = serial.split();
+
+    init::LateResources { TX: tx, RX: rx }
+}
+
+fn exti0(t: &amp;mut Threshold, r: EXTI0::Resources) {
+    let tx: &amp;mut Tx&lt;USART1&gt; = r.TX;
+    // do stuff with `tx`
+}
+
+fn exti1(t: &amp;mut Threshold, r: EXTI1::Resources) {
+    let rx: &amp;mut Rx&lt;USART1&gt; = r.RX;
+    // do stuff with `rx`
+}
+</code></pre>
+
+<p>In this new version the task <code>EXTI0</code> doesn&rsquo;t have to lock the USART1 peripheral to use the
+transmitter functionality even though the <code>RX</code> in task <code>EXTI1</code> is <em>also</em> using the USART1
+peripheral. This is OK because the <code>Tx</code> and <code>Rx</code> abstractions are written to operate on USART1
+concurrently without needing to lock it.</p>
+
+<p>Why wasn&rsquo;t the same possible in the v0.2.x version? The problem with that version is that <code>Tx</code> and
+<code>Rx</code> are constructed in the tasks themselves so there&rsquo;s no way to guarantee, at compile time, that a
+user won&rsquo;t construct a <code>Rx</code> instance in both tasks &ndash; if they do that then the lock becomes
+necessary.</p>
+
+<p>In the v0.3.x version <code>Tx</code> and <code>Rx</code> are constructed during <code>init</code> and then stored in resources. The
+resources have the types <code>Tx</code> and <code>Rx</code> which mean that there will <em>always</em> be <em>one</em> <code>Tx</code> and <em>one</em>
+<code>Rx</code> &ndash; remember that resources are <code>static</code> variables so the values stored in them can&rsquo;t never be
+destroyed nor can&rsquo;t their types change.</p>
+
+<p>So with move semantics of the new I/O model and late resources we can achieve even finer grained
+concurrency (less locks) than what was possible to do in v0.2.x.</p>
+
+<h1 id="safe-static-mut-references">Safe <code>&amp;'static mut</code> references</h1>
+
+<p>This is the new feature that landed in v0.3.0. Let me first describe how to use it and then I&rsquo;ll
+explain what use cases it enables.</p>
+
+<p>The <code>init</code> function can modify all <em>non-late</em> resources because it runs before all the tasks can
+run. In v0.2.x, every non-late resource appears under <code>init::Resources</code> as a field with type <code>&amp;mut
+T</code>; the lifetime of this reference is constrained to the scoped of the <code>init</code> function.</p>
+
+<p>In v0.3.x, you can assign non-late resources to <code>init</code>; this was not allowed in v0.2.x. When
+you assign a resource to <code>init</code> it becomes <em>owned</em> by <code>init</code>; it will still appear as a field of
+<code>init::Resources</code> but it will have type <code>&amp;'static mut T</code>.</p>
+
+<p>Example below:</p>
+
+<pre><code class="language-rust">// rtfm v0.3.x
+app! {
+    resources: {
+        static A: u32 = 0;
+        static B: u32 = 0;
+    },
+
+    init: {
+        // `init.resources` only exists in v0.3.x
+        resources: [A],
+    },
+}
+
+fn init(p: init::Peripherals, r: init::Resources) {
+    let a: &amp;'static mut u32 = r.A;
+    // note: non-static lifetime
+    let b: &amp; mut u32 = r.B;
+}
+</code></pre>
+
+<p>Some restrictions apply: a resource assigned to <code>init</code> can&rsquo;t be assigned to (i.e. shared with) any
+task; the other restriction, which I already mentioned, is that only <em>non-late</em> resources can be
+assigned to <code>init</code>.</p>
+
+<p>This doesn&rsquo;t seem too exciting on its own &hellip; so</p>
+
+<h2 id="why-static-mut">Why <code>&amp;'static mut</code>?</h2>
+
+<p><code>&amp;'static mut T</code> is very similar to <code>Box&lt;T&gt;</code>. They are both pointer sized and they both <em>own</em> the
+value <code>T</code> so they both have move semantics <em>and</em> implement <code>Send</code> (if <code>T: Send</code>). That makes them
+handy for cheaply <em>sending</em> stuff like buffers from one context of execution (thread or task) to
+another. Sending an owned <code>*mut [u8; 1024]</code> is much cheaper than sending <code>[u8; 1024]</code> because the
+later involves memcpy-ing  the whole array &ndash; whoops!</p>
+
+<p>The main difference between the two is that to create a <code>Box&lt;T&gt;</code> you need a (dynamic) memory
+allocator whereas <code>&amp;'static mut T</code> can be created without one.</p>
+
+<p>Sometimes you may not want to use a memory allocator in your application for performance, code size
+and / or reliability <sup class="footnote-ref" id="fnref:1"><a rel="footnote" href="#fn:1">1</a></sup> reasons so being able to safely create a <code>&amp;'static mut T</code> is a great
+alternative to <code>Box</code>! Provided that you don&rsquo;t really need a dynamic allocation: for instance, you
+can&rsquo;t create a <code>&amp;'static mut [T]</code> of arbitrary size; it has to be of a known size, or at least the
+upper bound of the size must be known at compile time.</p>
+
+<h3 id="lockless-queue">Lockless queue</h3>
+
+<p>The use case that originally prompted the need for <code>&amp;'static mut</code> references was a mechanism for
+inter task communication: a single producer single consumer ring buffer.</p>
+
+<p>What&rsquo;s that useful for? It&rsquo;s a lockless queue. A producer can queue new items into the ring buffer
+and a consumer can dequeue items from it. If only a single producer and a single consumer exist then
+they can both locklessly operate on the buffer even if they are being used from different execution
+contexts that can preempt each other. This mechanism would let us exchange data between a task and
+the idle loop without locking so it was a welcome addition!</p>
+
+<p>A <code>static</code> variable friendly <a href="https://docs.rs/heapless/0.2.1/heapless/ring_buffer/struct.RingBuffer.html">implementation</a> of such ring buffer is available in the <a href="https://docs.rs/heapless"><code>heapless</code></a>
+crate but its API produced a consumer and a producer with a lifetime <a href="https://docs.rs/heapless/0.2.1/heapless/ring_buffer/struct.RingBuffer.html#method.split">parameter</a> equal to the
+lifetime of the ring buffer. That API works fine with scoped threads in <code>std</code> land:</p>
+
+<pre><code class="language-rust">use heapless::RingBuffer;
+use scoped_threadpool::Pool;
+
+// (the signature is kind of odd due to the lack of const generics;
+//  ideally it should simply be `RingBuffer&lt;i32, 4&gt;`)
+let mut rb: RingBuffer&lt;i32, [i32; 4]&gt; = RingBuffer::new();
+
+rb.enqueue(0).unwrap();
+
+{
+    let (mut p, mut c) = rb.split();
+
+    Pool::new(2).scoped(move |scope| {
+        scope.execute(move || {
+            p.enqueue(1).unwrap();
+        });
+
+        scope.execute(move || {
+            c.dequeue().unwrap();
+        });
+    });
+}
+
+rb.dequeue().unwrap();
+</code></pre>
+
+<p>But to use it with RTFM both the producer and consumer need to have a <code>'static</code> lifetime parameter,
+otherwise they can&rsquo;t be stored in a resource (in a <code>static</code> variable). And that&rsquo;s only possible if
+one has a <code>&amp;'static mut</code> reference to a <code>RingBuffer</code>.</p>
+
+<p>Which became possible with v0.3.x. Here&rsquo;s an example that uses <code>RingBuffer</code> for task-idle
+communication:</p>
+
+<pre><code class="language-rust">use heapless::ring_buffer::{Consumer, Producer, RingBuffer},
+
+enum Event { A, B, C }
+
+// cortex-m-rtfm v0.3.x
+app! {
+    resources: {
+        // (again: with const generics we would be able to write `8` instead of
+        //  `[Event; 8]`)
+        static RB: RingBuffer&lt;Event, [Event; 8]&gt; = RingBuffer::new();
+        static C: Consumer&lt;'static, Event, [Event; 8]&gt;;
+        static P: Producer&lt;'static, Event, [Event; 8]&gt;;
+    },
+
+    init: {
+        resources: [RB],
+    },
+
+    idle: {
+        resources: [C],
+    },
+
+    tasks: {
+        EXTI0: {
+            path: exti0,
+            resources: [P],
+        },
+    },
+}
+
+fn init(p: init::Peripherals, r: init::Resources) -&gt; init::LateResources {
+    let rb: &amp;'static mut RingBuffer&lt;_, _&gt; = p.RB;
+
+    let (p, c) = rb.split();
+
+    init::LateResources { P: p, C: c }
+}
+
+fn idle(t: &amp;mut Threshold, r: idle::Resources) {
+    let c: &amp;mut Consumer&lt;'static, _, _&gt; = r.C;
+
+    loop {
+        if let Ok(event) = c.dequeue() {
+            // process event
+            match event {
+                Event::A =&gt; { /* .. */ }
+                Event::B =&gt; { /* .. */ }
+                Event::C =&gt; { /* .. */ }
+            }
+        } else {
+            // no event to process: go to sleep
+            asm::wfi();
+        }
+    }
+}
+
+fn exti0(t: &amp;mut Threshold, r: EXTI0::Resources) {
+    let p: &amp;mut Producer&lt;'static, _, _&gt; = r.P;
+
+    // ..
+
+    // notify `idle` about a new event
+    if cond {
+        p.queue(Event::A).unwrap();
+    } else if another_cond {
+        p.queue(Event::B).unwrap();
+    } else {
+        p.queue(Event::C).unwrap();
+    }
+}
+</code></pre>
+
+<h3 id="dma-transfers">DMA transfers</h3>
+
+<p>The other use case that I had for <code>&amp;'static mut</code> references was a memory safe API for DMA transfers.
+But that topic deserves its own blog post so I won&rsquo;t cover it here.</p>
+
+<h2 id="outside-rtfm">Outside RTFM</h2>
+
+<p>Not everyone wants to use RTFM (I guess some people don&rsquo;t like the procedural <code>app!</code> macro?) so I
+always try to make RTFM abstractions available outside of the RTFM framework, when possible at all.
+This time it was possible so I brought safe <code>&amp;'static mut</code> references to the <code>cortex-m</code> crate in
+the form of a <a href="https://docs.rs/cortex-m/0.4.2/cortex_m/macro.singleton.html"><code>singleton!</code></a> macro. Unlike the RTFM mechanism, the <code>singleton!</code> macro is not zero
+cost.</p>
+
+<p>Here&rsquo;s an example of using the macro:</p>
+
+<pre><code class="language-rust">#![no_std]
+
+#[macro_use(singleton)]
+extern crate cortex_m;
+extern crate cortex_m_rt;
+
+fn main() {
+    let a: &amp;'static mut u32 = singleton!(_: u32 = 0).unwrap();
+    assert_eq!(*a, 0);
+
+    let b: &amp;'static mut u32 = singleton!(_: u32 = 1).unwrap();
+    assert_eq!(*b, 1);
+
+    // pointers to different memory locations
+    assert_ne!(a as *mut _ as usize, b as *mut _ as usize);
+}
+</code></pre>
+
+<p>This program completes without panicking. Each <code>singleton!</code> invocation has a memory overhead of one
+(<code>.bss</code>) byte so 10 bytes total of (<code>.bss + .data</code>) RAM are used in this example. Each <code>singleton!</code>
+invocation also involves a runtime check and that&rsquo;s why the macro returns an <code>Option</code>.</p>
+
+<p>But why is the runtime check required? The runtime check is actually an aliasing check. Look at the
+next example:</p>
+
+<pre><code class="language-rust">#![no_std]
+
+#[macro_use(singleton)]
+extern crate cortex_m;
+extern crate cortex_m_rt;
+
+fn main() {
+    let a = alias(); // OK
+    let b = alias(); // `panic!`s
+}
+
+fn alias() -&gt; &amp;'static mut u32 {
+    singleton!(_: u32 = 0).unwrap()
+}
+</code></pre>
+
+<p>This program will <code>panic!</code> because <code>alias</code> returns a pointer to the <em>same</em> memory location in both
+invocations. Without the runtime check <code>b</code> would have become an alias of <code>a</code> and that would have
+broken Rust aliasing model.</p>
+
+<p>That&rsquo;s it for this post. In the next one I&rsquo;ll present an API for memory safe DMA transfers.</p>
+
+<hr />
+
+<p><strong>Thank you patrons! ❤️</strong></p>
+
+<p>I want to wholeheartedly thank:</p>
+
+<div class="grid">
+  <div class="cell">
+    <a href="https://www.sharebrained.com/" style="border-bottom:0px">
+      <img alt="ShareBrained Technology" class="image" src="/logo/sharebrained.png"/>
+    </a>
+  </div>
+
+<p><div class="cell">
+    <a href="https://www.pollen-robotics.com/" style="border-bottom:0px">
+      <img alt="Pollen Robotics" class="image" src="/logo/pollen-robotics.png"/>
+    </a>
+  </div></p>
+
+<p><div class="cell">
+    <a href="https://formation.sh/" style="border-bottom:0px">
+      <img alt="Formation Aerosystems" class="image" src="/logo/formation.png"/>
+    </a>
+  </div>
+</div></p>
+
+<p><a href="https://github.com/Razican">Iban Eguia</a>,
+<a href="https://github.com/aturon">Aaron Turon</a>,
+<a href="https://github.com/archaelus">Geoff Cant</a>,
+<a href="http://www.harrisonchin.com/">Harrison Chin</a>,
+<a href="https://github.com/brandonedens">Brandon Edens</a>,
+<a href="https://github.com/whitequark">whitequark</a>,
+<a href="https://jamesmunns.com/">James Munns</a>,
+<a href="https://github.com/flundstrom2">Fredrik Lundström</a>,
+<a href="https://github.com/kjetilkjeka">Kjetil Kjeka</a>,
+Kor Nielsen,
+<a href="https://myrrlyn.net/">Alexander Payne</a>,
+<a href="https://metafluff.com/">Dietrich Ayala</a>,
+<a href="http://kenkeiter.com/">Kenneth Keiter</a>
+and 42 more people for <a href="https://www.patreon.com/japaric">supporting my work on Patreon</a>.</p>
+
+<!-- [Kor Nielsen]: -->
+
+<hr />
+
+<p>Let&rsquo;s discuss on <a href="https://www.reddit.com/r/rust/comments/7s81h1/eir_real_time_for_the_masses_v030_safe_static_mut/">reddit</a>.</p>
+
+<p>Enjoyed this post? Like my work on embedded stuff? Consider supporting my work
+on <a href="https://www.patreon.com/japaric">Patreon</a>!</p>
+
+<p>Follow me on <a href="https://twitter.com/japaricious">twitter</a> for even more embedded stuff.</p>
+
+<p>The embedded Rust community gathers on the #rust-embedded IRC channel
+(irc.mozilla.org). Join us!</p>
+<div class="footnotes">
+
+<hr />
+
+<ol>
+<li id="fn:1">e.g. can&rsquo;t afford the possibility of the abort that an OOM condition triggers
+ <a class="footnote-return" href="#fnref:1"><sup>[return]</sup></a></li>
+</ol>
+</div>
+
+    </div>
+
+    
+    
+    <div class="article-toc" >
+        <h3>Contents</h3>
+        <nav id="TableOfContents">
+<ul>
+<li><a href="#late-resources">Late resources</a></li>
+<li><a href="#new-i-o-model-less-locks">New I/O model = less locks</a></li>
+<li><a href="#safe-static-mut-references">Safe <code>&amp;'static mut</code> references</a>
+<ul>
+<li><a href="#why-static-mut">Why <code>&amp;'static mut</code>?</a>
+<ul>
+<li><a href="#lockless-queue">Lockless queue</a></li>
+<li><a href="#dma-transfers">DMA transfers</a></li>
+</ul></li>
+<li><a href="#outside-rtfm">Outside RTFM</a></li>
+</ul></li>
+</ul>
+</nav>
+    </div>
+    
+    
+
+    
+  </div>
+</section>
+
+
+<section class="section">
+  <div class="container has-text-centered">
+    <p><a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" src="https://i.creativecommons.org/l/by/4.0/80x15.png" /></a><br/>Jorge Aparicio</p>
+  </div>
+</section>
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.11.0/styles/tomorrow-night.min.css" />
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.11.0/highlight.min.js" integrity="sha256-+bhVTaRmJ/c07eV80nU8gD2cBBF0rYkf1txqXlrbvb0=" crossorigin="anonymous"></script>
+
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.11.0/languages/armasm.min.js"></script>
+
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.11.0/languages/rust.min.js"></script>
+
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.11.0/languages/shell.min.js"></script>
+
+<script>hljs.initHighlightingOnLoad();</script>
+
+
+<script>
+window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+ga('create', 'UA-87779174-3', 'auto');
+ga('send', 'pageview');
+</script>
+<script async src='//www.google-analytics.com/analytics.js'></script>
+
+
+
+</body>

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Tags on Embedded in Rust</title>
+    <link>https://blog.japaric.io/tags/</link>
+    <description>Recent content in Tags on Embedded in Rust</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <copyright>&lt;a rel=&#34;license&#34; href=&#34;http://creativecommons.org/licenses/by/4.0/&#34;&gt;&lt;img alt=&#34;Creative Commons License&#34; src=&#34;https://i.creativecommons.org/l/by/4.0/80x15.png&#34; /&gt;&lt;/a&gt;&lt;br/&gt;Jorge Aparicio</copyright>
+    <lastBuildDate>Wed, 31 May 2017 21:14:06 -0500</lastBuildDate>
+    
+	<atom:link href="https://blog.japaric.io/tags/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Analysis</title>
+      <link>https://blog.japaric.io/tags/analysis/</link>
+      <pubDate>Wed, 31 May 2017 21:14:06 -0500</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/analysis/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Arm Cortex M</title>
+      <link>https://blog.japaric.io/tags/arm-cortex-m/</link>
+      <pubDate>Sat, 17 Feb 2018 18:16:39 +0100</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/arm-cortex-m/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Concurrency</title>
+      <link>https://blog.japaric.io/tags/concurrency/</link>
+      <pubDate>Mon, 22 Jan 2018 19:58:35 +0100</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/concurrency/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>I/O</title>
+      <link>https://blog.japaric.io/tags/i/o/</link>
+      <pubDate>Fri, 09 Feb 2018 11:47:30 +0100</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/i/o/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Microcontroller</title>
+      <link>https://blog.japaric.io/tags/microcontroller/</link>
+      <pubDate>Fri, 09 Feb 2018 11:47:30 +0100</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/microcontroller/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Performance</title>
+      <link>https://blog.japaric.io/tags/performance/</link>
+      <pubDate>Sun, 04 Jun 2017 14:08:14 -0500</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/performance/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Recipe</title>
+      <link>https://blog.japaric.io/tags/recipe/</link>
+      <pubDate>Sun, 04 Jun 2017 14:08:14 -0500</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/recipe/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Rtfm</title>
+      <link>https://blog.japaric.io/tags/rtfm/</link>
+      <pubDate>Mon, 22 Jan 2018 19:58:35 +0100</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/rtfm/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Safety</title>
+      <link>https://blog.japaric.io/tags/safety/</link>
+      <pubDate>Sat, 17 Feb 2018 18:16:39 +0100</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/safety/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Template</title>
+      <link>https://blog.japaric.io/tags/template/</link>
+      <pubDate>Fri, 28 Apr 2017 22:05:45 -0500</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/template/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Tooling</title>
+      <link>https://blog.japaric.io/tags/tooling/</link>
+      <pubDate>Fri, 28 Apr 2017 22:05:45 -0500</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/tooling/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Tutorial</title>
+      <link>https://blog.japaric.io/tags/tutorial/</link>
+      <pubDate>Fri, 28 Apr 2017 22:05:45 -0500</pubDate>
+      
+      <guid>https://blog.japaric.io/tags/tutorial/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>
